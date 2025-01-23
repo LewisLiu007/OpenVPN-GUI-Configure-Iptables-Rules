@@ -5,3 +5,4 @@ yoocar4,10.18.164.6
 changzhou,9.4.32.5
 
 [allow_rules]
+yoocar4,changzhou

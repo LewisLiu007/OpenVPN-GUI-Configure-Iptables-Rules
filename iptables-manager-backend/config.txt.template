@@ -1,0 +1,36 @@
+# config.txt
+# 配置文件格式说明：
+# 本配置文件分为三个部分：[users]、[resources] 和 [allow_rules]。
+# 1. [users]：定义用户及其对应的IP地址。
+#    格式：用户名, 用户IP
+# 2. [resources]：定义资源（网站、服务器等）及其对应的IP地址。
+#    格式：资源名, 资源IP
+# 3. [allow_rules]：定义允许用户访问的资源。
+#    格式：用户名, 资源名
+# 注意：
+# - 每个部分必须以方括号开头，如 [users]。
+# - 注释行以 # 开头。
+# - 字段之间用逗号分隔，且不要包含多余的空格。
+
+# 示例配置：
+
+[users]
+# 用户列表
+user1,10.18.164.4
+user2,10.18.164.5
+# 可以根据需要添加更多用户
+
+[resources]
+# 资源列表
+changzhou-site,36.151.73.154
+shanghai-office,222.71.200.90
+# 可以根据需要添加更多资源
+
+[allow_rules]
+# 允许规则
+# 格式：用户名, 资源名
+user1,changzhou-site
+user1,shanghai-office
+user2,changzhou-site
+
+# 可以根据需要添加更多允许规则

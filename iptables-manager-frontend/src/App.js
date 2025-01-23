@@ -158,7 +158,7 @@ function App() {
   // ---------------------------
   return (
     <Container className="mt-4">
-      <h1 className="text-center mb-4">Yoocar优咔 VPN 权限控制配置管理</h1>
+      <h1 className="text-center mb-4">OpenVPN用户网络隔离配置</h1>
 
       {/* 提示信息区域 */}
       {message.text && (
