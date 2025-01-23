@@ -1,31 +1,40 @@
 // src/App.js
+// 说明：
+// 1. 从后端 /api/config 获取当前配置 (users, resources, allow_rules)。
+// 2. 从后端 /api/ipp-users 获取 OpenVPN ipp.txt 用户列表 (username, user_ip)。
+// 3. 用户管理：从下拉框中选择用户名，自动填充 IP，删除前检查是否有规则引用该用户。
+// 4. 资源管理：手动输入资源名和IP，删除前检查是否有规则引用该资源。
+// 5. 允许规则管理：可添加/删除规则。若已存在相同规则则避免重复添加。
+// 6. 提交配置：POST 到 /api/update-config 并执行管理脚本。
 
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Form, Button, Table, Card, Alert } from 'react-bootstrap';
 import axios from 'axios';
 
 function App() {
-  // 1. 用于存储从后端获取的当前配置
-  const [users, setUsers] = useState([]);          // [{username: '', user_ip: ''}, ...]
-  const [resources, setResources] = useState([]);  // [{resource_name: '', resource_ip: ''}, ...]
-  const [allowRules, setAllowRules] = useState([]);// [{username: '', resource_name: ''}, ...]
+  // 1. 当前 config.txt 中的用户、资源、规则
+  const [users, setUsers] = useState([]);
+  const [resources, setResources] = useState([]);
+  const [allowRules, setAllowRules] = useState([]);
 
-  // 2. 用于保存添加新项目时的表单输入
+  // 2. 用于添加新用户 / 新资源 / 新规则的临时输入
   const [newUser, setNewUser] = useState({ username: '', user_ip: '' });
   const [newResource, setNewResource] = useState({ resource_name: '', resource_ip: '' });
   const [newRule, setNewRule] = useState({ username: '', resource_name: '' });
 
-  // 3. 用于显示提示信息（成功、失败等）
+  // 3. 提示信息
   const [message, setMessage] = useState({ type: '', text: '' });
 
+  // 4. ippUsers：从后端 /api/ipp-users 获取的可选用户列表 (ipp.txt)
+  const [ippUsers, setIppUsers] = useState([]);
+
   // ---------------------------
-  //   一、加载现有配置
+  //   一、加载现有配置 & IPP用户列表
   // ---------------------------
   useEffect(() => {
-    // 页面加载时，从后端读取 config.txt 当前配置
+    // 加载当前 config.txt 配置
     axios.get('http://192.168.164.177:5000/api/config')
       .then(response => {
-        // 根据后端返回的数据结构 { users, resources, allow_rules }
         const { users, resources, allow_rules } = response.data;
         setUsers(users);
         setResources(resources);
@@ -35,57 +44,76 @@ function App() {
         console.error('加载配置时出错:', error);
         setMessage({ type: 'danger', text: '加载配置时出错' });
       });
+
+    // 加载 IPP 用户列表，用于下拉框
+    axios.get('http://192.168.164.177:5000/api/ipp-users')
+      .then(response => {
+        setIppUsers(response.data); // [{username, user_ip}, ...]
+      })
+      .catch(error => {
+        console.error('加载IPP用户列表时出错:', error);
+        // 如需提示可在此设置
+      });
   }, []);
 
   // ---------------------------
-  //   二、添加/删除用户
+  //   二、添加/删除 用户（带删除限制）
   // ---------------------------
   const addUser = () => {
     if (!newUser.username.trim() || !newUser.user_ip.trim()) {
-      setMessage({ type: 'danger', text: '请填写完整的用户信息' });
+      setMessage({ type: 'danger', text: '请选择用户' });
       return;
     }
+    // 检查是否在 users 中已存在
+    const exists = users.some(u => u.username === newUser.username);
+    if (exists) {
+      setMessage({ type: 'warning', text: '该用户已存在' });
+      return;
+    }
+
     setUsers([...users, newUser]);
     setNewUser({ username: '', user_ip: '' });
     setMessage({ type: 'success', text: '用户已添加' });
   };
 
   const deleteUser = (index) => {
-    // 先检查是否被任何允许规则所使用
+    // 检查该用户是否被允许规则所使用
     const userToDelete = users[index];
-    const isUsedByRule = allowRules.some(
-      (rule) => rule.username === userToDelete.username
-    );
+    const isUsedByRule = allowRules.some(rule => rule.username === userToDelete.username);
     if (isUsedByRule) {
       setMessage({ type: 'danger', text: '请先删除允许规则的配置再删除此用户' });
       return;
     }
 
-    // 如果没有被规则使用，则删除
     const updatedUsers = [...users];
     updatedUsers.splice(index, 1);
     setUsers(updatedUsers);
   };
 
   // ---------------------------
-  //   三、添加/删除资源
+  //   三、添加/删除 资源（带删除限制）
   // ---------------------------
   const addResource = () => {
     if (!newResource.resource_name.trim() || !newResource.resource_ip.trim()) {
       setMessage({ type: 'danger', text: '请填写完整的资源信息' });
       return;
     }
+    // 检查是否已存在同名资源
+    const exists = resources.some(r => r.resource_name === newResource.resource_name);
+    if (exists) {
+      setMessage({ type: 'warning', text: '资源名已存在' });
+      return;
+    }
+
     setResources([...resources, newResource]);
     setNewResource({ resource_name: '', resource_ip: '' });
     setMessage({ type: 'success', text: '资源已添加' });
   };
 
   const deleteResource = (index) => {
-    // 先检查是否被任何允许规则所使用
+    // 检查该资源是否被允许规则所使用
     const resourceToDelete = resources[index];
-    const isUsedByRule = allowRules.some(
-      (rule) => rule.resource_name === resourceToDelete.resource_name
-    );
+    const isUsedByRule = allowRules.some(rule => rule.resource_name === resourceToDelete.resource_name);
     if (isUsedByRule) {
       setMessage({ type: 'danger', text: '请先删除允许规则的配置再删除此资源' });
       return;
@@ -97,22 +125,22 @@ function App() {
   };
 
   // ---------------------------
-  //   四、添加/删除允许规则
+  //   四、添加/删除 允许规则
   // ---------------------------
   const addRule = () => {
     if (!newRule.username.trim() || !newRule.resource_name.trim()) {
       setMessage({ type: 'danger', text: '请选择用户和资源' });
       return;
     }
-    // 检查用户和资源是否已存在
+    // 检查用户、资源是否存在
     const userExists = users.some(u => u.username === newRule.username);
     const resourceExists = resources.some(r => r.resource_name === newRule.resource_name);
     if (!userExists || !resourceExists) {
       setMessage({ type: 'danger', text: '指定的用户或资源不存在' });
       return;
     }
-    // 检查是否已经存在相同的规则
-    const ruleExists = allowRules.some(rule => 
+    // 检查规则是否重复
+    const ruleExists = allowRules.some(rule =>
       rule.username === newRule.username && rule.resource_name === newRule.resource_name
     );
     if (ruleExists) {
@@ -158,9 +186,8 @@ function App() {
   // ---------------------------
   return (
     <Container className="mt-4">
-      <h1 className="text-center mb-4">OpenVPN用户网络隔离配置</h1>
+      <h1 className="text-center mb-4">Yoocar优咔 VPN 权限控制配置管理</h1>
 
-      {/* 提示信息区域 */}
       {message.text && (
         <Alert
           variant={message.type}
@@ -178,24 +205,37 @@ function App() {
             <Card.Header>用户管理</Card.Header>
             <Card.Body>
               <Form>
-                <Form.Group controlId="formUsername" className="mb-2">
-                  <Form.Label>用户名</Form.Label>
+                <Form.Group controlId="formSelectUsername" className="mb-2">
+                  <Form.Label>选择用户名</Form.Label>
                   <Form.Control
-                    type="text"
-                    placeholder="输入用户名"
+                    as="select"
                     value={newUser.username}
-                    onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                  />
+                    onChange={(e) => {
+                      const selectedUsername = e.target.value;
+                      const found = ippUsers.find(u => u.username === selectedUsername);
+                      const ip = found ? found.user_ip : '';
+                      setNewUser({ username: selectedUsername, user_ip: ip });
+                    }}
+                  >
+                    <option value="">请选择</option>
+                    {ippUsers.map((item, idx) => (
+                      <option key={idx} value={item.username}>
+                        {item.username}
+                      </option>
+                    ))}
+                  </Form.Control>
                 </Form.Group>
+
                 <Form.Group controlId="formUserIP" className="mb-2">
                   <Form.Label>用户IP</Form.Label>
                   <Form.Control
                     type="text"
-                    placeholder="输入用户IP（例如10.18.164.4）"
+                    placeholder="用户IP"
                     value={newUser.user_ip}
-                    onChange={(e) => setNewUser({ ...newUser, user_ip: e.target.value })}
+                    readOnly
                   />
                 </Form.Group>
+
                 <Button variant="primary" onClick={addUser}>添加用户</Button>
               </Form>
 
@@ -302,8 +342,8 @@ function App() {
                     onChange={(e) => setNewRule({ ...newRule, username: e.target.value })}
                   >
                     <option value="">选择用户</option>
-                    {users.map((user, index) => (
-                      <option key={index} value={user.username}>
+                    {users.map((user, idx) => (
+                      <option key={idx} value={user.username}>
                         {user.username}
                       </option>
                     ))}
@@ -317,8 +357,8 @@ function App() {
                     onChange={(e) => setNewRule({ ...newRule, resource_name: e.target.value })}
                   >
                     <option value="">选择资源</option>
-                    {resources.map((resource, index) => (
-                      <option key={index} value={resource.resource_name}>
+                    {resources.map((resource, idx) => (
+                      <option key={idx} value={resource.resource_name}>
                         {resource.resource_name}
                       </option>
                     ))}
