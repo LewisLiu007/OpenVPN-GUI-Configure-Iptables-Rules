@@ -1,0 +1,7 @@
+[users]
+yoocar4,10.18.164.6
+
+[resources]
+changzhou,9.4.32.5
+
+[allow_rules]
